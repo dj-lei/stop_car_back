@@ -19,7 +19,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 
 server_address = 'localhost'
-es_ctrl = Elasticsearch([{'host': server_address, 'port': 9200}])
+es_ctrl = Elasticsearch([{'host': '121.41.42.251', 'port': 9200}])
 
 
 def get_elm(data, car_number):
