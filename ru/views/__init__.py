@@ -4,10 +4,8 @@ import re
 import json
 import time
 import uuid
-import difflib
 import threading
 import requests
-import configparser
 import traceback
 import pandas as pd
 from django.http import HttpResponse
