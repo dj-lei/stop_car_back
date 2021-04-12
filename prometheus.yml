@@ -28,4 +28,4 @@ scrape_configs:
   follow_redirects: true
   static_configs:
   - targets:
-    - 10.150.86.161:9000
+    - 121.41.42.251:9000
