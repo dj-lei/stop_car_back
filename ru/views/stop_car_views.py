@@ -1,26 +1,14 @@
 from ru.views import *
 
 
-def insert_db(username, car):
-    try:
-        res = es_ctrl.search(index='stop-car-data', body=query_with([['username', str(username)], ['car_number', car['车牌号']]]))['hits']['hits']
-        if len(res) > 0:
-            res[0]['_source']['origin_info'] = car
-            _ = es_ctrl.update(index='stop-car-data', body={'doc': res[0]['_source']}, id=res[0]['_id'])
-            send(car['车牌号'])
-        else:
-            _ = es_ctrl.index(index='stop-car-data', body={'username': username, 'car_number': car['车牌号'], 'state': '待定','history': [], 'origin_info': car, 'query_info': {}})
-            send(car['车牌号'])
-        print(username, car['车牌号'], 'add ok!')
-    except Exception as e:
-        traceback.print_exc()
+def index(request):
+    return HttpResponse("Hello World!")
 
 
-def send(car_number):
-    with open("config.json", 'r') as f:
-        config = json.load(f)
-    payload = {"cards": str(car_number)}
-    ret = request.post(config['add_url'], data=json.dumps(payload), headers=config['add_headers'], timeout=3)
+def add_car(stop_car_table, username):
+    for car in json.loads(stop_car_table.to_json(orient='records')):
+        redis_con.sadd('stop_car_data', json.dumps({'username': username, 'info': car}))
+    prometheus_error.labels(username=str(username), operate="run", state="ok", msg='').inc(1)
 
 
 def query(request):
@@ -28,30 +16,24 @@ def query(request):
         if request.method == 'GET':
             car_number = request.GET.get('car_number')
             username = request.GET.get('username')
-            insert_db(username, {'车牌号': car_number})
+            redis_con.sadd('stop_car_data', json.dumps({'username': username, 'info': {'车牌号': car_number}}))
+            prometheus_error.labels(username=str(username), operate="query", state="ok", msg='').inc(1)
             return JsonResponse({'content': 'ok'})
     except Exception as e:
-        traceback.print_exc()
-
-
-def add_car(stop_car_table, username):
-    for car in json.loads(stop_car_table.to_json(orient='records')):
-        try:
-            insert_db(username, car)
-            time.sleep(0.5)
-        except Exception as e:
-            traceback.print_exc()
-    print('reset cars ok!')
+        prometheus_error.labels(username=str(username), operate="query", state="error", msg=traceback.format_exc()).inc(1)
 
 
 def run(request):
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        upload_file = request.FILES.get('file')
-        stop_car_table = pd.read_excel(upload_file)
-        t1 = threading.Thread(target=add_car, args=(stop_car_table, username,))
-        t1.start()
-    return JsonResponse({'content': 'ok'})
+    try:
+        if request.method == 'POST':
+            username = request.POST.get('username')
+            upload_file = request.FILES.get('file')
+            stop_car_table = pd.read_excel(upload_file)
+            t1 = threading.Thread(target=add_car, args=(stop_car_table, username,))
+            t1.start()
+        return JsonResponse({'content': 'ok'})
+    except Exception as e:
+        prometheus_error.labels(username=str(username), operate="run", state="error", msg=traceback.format_exc()).inc(1)
 
 
 def get(request):
@@ -66,7 +48,7 @@ def get(request):
                     res.append({'card': elm['_source']['query_info']['card'], 'pltName': '', 'img': '', 'address1':'', 'address2':'', 'comeTime':'', 'state':''})
             return JsonResponse({'content': res})
     except Exception as e:
-        traceback.print_exc()
+        prometheus_error.labels(username=str(username), operate="get", state="error", msg=traceback.format_exc()).inc(1)
 
 
 def history_info(request):
@@ -87,7 +69,7 @@ def history_info(request):
             else:
                 return JsonResponse({'content': [{'name': 'msg', 'value': '没有查询到历史信息.'}]})
     except Exception as e:
-        traceback.print_exc()
+        prometheus_error.labels(username=str(username), operate="history_info", state="error", msg=traceback.format_exc()).inc(1)
 
 
 def origin_info(request):
@@ -104,8 +86,6 @@ def origin_info(request):
             else:
                 return JsonResponse({'content': [{'name': 'msg', 'value': '没有查询到车辆详情.'}]})
     except Exception as e:
-        traceback.print_exc()
+        prometheus_error.labels(username=str(username), operate="origin_info", state="error", msg=traceback.format_exc()).inc(1)
 
 
-def index(request):
-    return HttpResponse("Hello World!")
